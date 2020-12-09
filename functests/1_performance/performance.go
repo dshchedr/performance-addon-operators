@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/node/v1beta1"
@@ -360,6 +361,19 @@ func validatTunedActiveProfile(nodes []corev1.Node) {
 	var err error
 	var out []byte
 	activeProfileName := components.GetComponentName(testutils.PerformanceProfileName, components.ProfileNamePerformance)
+
+	// check if some another Tuned profile overwrites PAO profile
+	tunedList := &tunedv1.TunedList{}
+	if err := testclient.Client.List(context.TODO(), tunedList); err != nil {
+		println(err)
+	}
+	for _, t := range tunedList.Items {
+		if strings.Contains(*t.Spec.Profile[0].Data, fmt.Sprintf("include=%s", activeProfileName)) {
+			klog.Warning(fmt.Sprintf("PAO tuned profile amended by '%s' profile, test may fail", t.Name))
+			activeProfileName = *t.Spec.Profile[0].Name
+		}
+	}
+
 	for _, node := range nodes {
 		tuned := tunedForNode(&node)
 		tunedName := tuned.ObjectMeta.Name
